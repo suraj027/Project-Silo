@@ -379,7 +379,7 @@ export function buildShell({ pool }) {
   section.receiveShadow = true;
   group.add(wall, section);
 
-  // floor slabs 1..144 (instanced) + roof cap with the ramp opening
+  // floor slabs 1..144 (instanced) + roof cap with the opening under the hatch
   const slabGeo = slabGeometry();
   const slabs = new THREE.InstancedMesh(slabGeo, [floorMat, ceilMat, slabSection], C.LEVELS);
   slabs.name = 'shell-slabs';
@@ -395,7 +395,7 @@ export function buildShell({ pool }) {
   slabs.computeBoundingSphere();
   group.add(slabs);
 
-  const roofGeo = slabGeometry({ rIn: 0, holes: [[-34.6, -0.7, -23.2, -4.3]] });
+  const roofGeo = slabGeometry({ rIn: 0, holes: [[-31.5, -0.7, -23.8, -4.3]] });
   const roof = new THREE.Mesh(roofGeo, [ceilMat, ceilMat, slabSection]);
   roof.name = 'shell-roofcap';
   roof.castShadow = roof.receiveShadow = true;

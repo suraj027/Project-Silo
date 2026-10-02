@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Batch, Kit, UNIT, col } from '../core/geom.js';
+import { Batch, Kit, UNIT, col, extrude } from '../core/geom.js';
 import { MATS, TEX } from '../core/materials.js';
 import { toTexture, tatteredAlphaCanvas } from '../core/textures.js';
 import { makeRng, fbm, smooth, clamp } from '../core/rng.js';
@@ -7,13 +7,14 @@ import * as C from '../core/constants.js';
 
 // ---------------------------------------------------------------------------
 // Above ground: a dusty plain cut along z = 0, the earth section below it,
-// silo hoods, the hill with its dead tree, and a ruined skyline in the haze.
+// silo hatches and camera shelters, the hill with its dead tree, and a
+// ruined skyline in the haze.
 // ---------------------------------------------------------------------------
 
 const EXTENT = 3200;
 const EARTH_BOTTOM = -1204;
 
-/** Silo hood positions: silo 18 at the origin, 17 to the north-west. */
+/** Silo positions: silo 18 at the origin, 17 to the north-west. */
 export const SILOS = (() => {
   const r = makeRng(5050);
   const list = [
@@ -52,7 +53,7 @@ export const SILOS = (() => {
     }
   }
   for (const s of list) {
-    // each hood faces roughly towards silo 18 / the viewer
+    // each entrance faces roughly towards silo 18 / the viewer
     s.face = Math.atan2(-s.z, -s.x);
   }
   return list;
@@ -158,12 +159,11 @@ function buildTerrain() {
     }
   }
   const idx = [];
-  // leave an opening where the hood sits over the top of the ramp
-  const underHood = (x, z) => x > -34.3 && x < -22.9 && z > -5.2;
+  // (silo 18's hatch needs no opening: its closed leaves sit above the
+  // ground, and from the shaft below the one-sided ground can't be seen)
   for (let j = 0; j < nz - 1; j++) {
     for (let i = 0; i < nx - 1; i++) {
       const a = j * nx + i, b = a + 1, d = a + nx, e = d + 1;
-      if (underHood((xs[i] + xs[i + 1]) / 2, (zs[j] + zs[j + 1]) / 2)) continue;
       // counter-clockwise seen from above (z runs away from the viewer)
       idx.push(a, b, d, b, e, d);
     }
@@ -329,19 +329,72 @@ function shrubGeometry() {
   return b.build();
 }
 
-function buildHood(kit, x, z, face, big = true) {
-  // a squat concrete shroud with a steel door
-  kit.push(x, 0, z, -face + 0, 1);
-  if (big) {
-    kit.box('concrete', -5.2, 1.7, 0, 10.5, 3.6, 6.2, '#8a8578');
-    kit.box('concrete', -5.2, 3.65, 0, 10.9, 0.3, 6.6, '#7f7a6e');
-    kit.box('steel', 0.1, 1.45, 0, 0.25, 2.9, 3.4, '#3a3f3d');
-    kit.box('steel', 0.2, 1.45, 0, 0.12, 2.5, 3.0, '#4a504d');
-    kit.cylR('steel', 0.3, 1.5, 0.9, 0.12, 0.25, '#6c706c', 0, 0, Math.PI / 2, 10);
-  } else {
-    kit.box('concrete', -2.5, 1.2, 0, 5, 2.4, 4, '#8a8578');
-    kit.box('steel', 0.05, 1.0, 0, 0.15, 1.9, 2.2, '#3a3f3d');
+/**
+ * A silo's way out, as in the show: a flat hatch in the ground inside a low
+ * concrete curb, its two steel leaves ribbed like a sunburst, and just past
+ * its far end the camera shelter, about as wide as the hatch. A slab roof
+ * with rounded edges sits on two thick walls; under it a squat cone, the
+ * housing of the outside camera (about shoulder height), stands on three
+ * round steps that spill out of the open front.
+ *
+ * Local frame: the hatch centre at the origin on the ground, its long axis
+ * along z, in line with the ramp beneath; the shelter stands on that line
+ * past the hatch's -z end, its open front (and the camera) facing back along
+ * the ramp toward +z.
+ */
+export const ENTRANCE = { hatchX: 1.8, hatchZ: 3.85, curb: 0.45, shelterZ: -9.0 };
+function buildEntrance(kit, x, z, ry, s = 1) {
+  kit.push(x, 0, z, ry, s);
+  const { hatchX: hx, hatchZ: hz, curb } = ENTRANCE;
+  const concrete = '#8e897d';
+  // -- the hatch: curb, two leaves, sunburst ribs
+  kit.bb('concrete', -hx - curb, -0.4, -hz - curb, hx + curb, 0.55, -hz, concrete);
+  kit.bb('concrete', -hx - curb, -0.4, hz, hx + curb, 0.55, hz + curb, concrete);
+  kit.bb('concrete', -hx - curb, -0.4, -hz, -hx, 0.55, hz, concrete);
+  kit.bb('concrete', hx, -0.4, -hz, hx + curb, 0.55, hz, concrete);
+  const leaf = '#6a5f51', rib = '#7d7263', rim = '#57504a';
+  // the leaves hinge on the long sides and meet along the middle
+  for (const side of [-1, 1]) {
+    const x0 = side < 0 ? -hx : 0, x1 = side < 0 ? 0 : hx;
+    kit.bb('steel', x0, 0.3, -hz, x1, 0.4, hz, leaf);
+    // a rim round each leaf
+    kit.bb('steel', x0, 0.4, -hz, x0 + 0.1, 0.45, hz, rim);
+    kit.bb('steel', x1 - 0.1, 0.4, -hz, x1, 0.45, hz, rim);
+    kit.bb('steel', x0, 0.4, -hz, x1, 0.45, -hz + 0.1, rim);
+    kit.bb('steel', x0, 0.4, hz - 0.1, x1, 0.45, hz, rim);
+    // ribs fanning out from the middle of the seam
+    const far = side * hx;
+    const ends = [[far * 0.5, -hz], [far, -hz], [far, -hz * 0.5], [far, 0], [far, hz * 0.5], [far, hz], [far * 0.5, hz]];
+    for (const [ex, ez] of ends) kit.beam('steel', [0, 0.43, 0], [ex * 0.96, 0.43, ez * 0.96], 0.07, 0.04, rib);
   }
+  kit.bb('steel', -0.03, 0.4, -hz, 0.03, 0.44, hz, '#2a2724'); // the seam
+  // -- the shelter
+  const sz = ENTRANCE.shelterZ; // middle of its depth
+  const back = sz - 1.9, front = sz + 1.7, H = 3.4;
+  // three round steps, the lowest just below ground, 1.6 m short of the curb
+  [[2.2, 0], [1.85, 0.22], [1.5, 0.44]].forEach(([r, y]) => kit.cyl('concrete', 0, y - 0.1, sz + 0.9, r, 0.34, '#858074', 40));
+  // back wall, dark inside the shelter
+  kit.bb('concrete', -1.5, 0, back, 1.5, H, back + 0.45, '#6f6b62');
+  // the two side walls: deep at the foot, their fronts leaning back
+  const wall = new THREE.Shape([
+    new THREE.Vector2(-back, 0),
+    new THREE.Vector2(-front, 0),
+    new THREE.Vector2(-(front - 0.7), H),
+    new THREE.Vector2(-back, H),
+  ]);
+  const wallGeo = extrude(wall, 0.8, false, 1);
+  for (const x0 of [-2.25, 1.45]) kit.geo('concrete', wallGeo, x0, 0, 0, concrete, 1, 1, 1, 0, Math.PI / 2, 0);
+  // the roof: a slab with rounded front and back edges
+  const roofW = 4.6, rT = 0.5, r0 = back - 0.4, r1 = front + 0.6;
+  kit.bb('concrete', -roofW / 2, H, r0 + rT / 2, roofW / 2, H + rT, r1 - rT / 2, '#8a857a');
+  for (const ez of [r0 + rT / 2, r1 - rT / 2]) kit.cylR('concrete', 0, H + rT / 2, ez, rT / 2, roofW, '#8a857a', 0, 0, Math.PI / 2, 16);
+  // the camera housing: a squat cone with a band near its foot and a lens
+  const cz = sz, cy = 0.68;
+  kit.cyl('concrete', 0, cy, cz, 1.0, 1.6, '#938d81', 32, 0.6);
+  kit.cyl('concrete', 0, cy + 0.25, cz, 0.97, 0.1, '#857f73', 32);
+  kit.cyl('concrete', 0, cy + 1.6, cz, 0.63, 0.08, '#857f73', 32);
+  kit.cylR('steel', 0, cy + 1.25, cz + 0.72, 0.12, 0.1, '#1a1e1f', Math.PI / 2 - 0.25, 0, 0, 16);
+  kit.cylR('steel', 0, cy + 1.25, cz + 0.76, 0.08, 0.05, '#0b1013', Math.PI / 2 - 0.25, 0, 0, 16);
   kit.pop();
 }
 
@@ -372,31 +425,13 @@ export function buildSurface({ pool }) {
 
   // props -------------------------------------------------------------------
   const kit = new Kit('surface/props');
-  // Silo 18's exit: the ramp's own roof rises out of the ground as a low
-  // wedge (built with the ramp); here the portal at its top end, the steel
-  // door, a cheek wall behind it and a worn apron.
-  const pitch = Math.atan2(7.6, 20.6);
-  const wedgeTop = 3.75;
-  const wedgeFoot = -24.2 - wedgeTop / Math.tan(pitch);
-  prism(kit, 'concrete', [[wedgeFoot, -0.3], [-23.4, -0.3], [-23.4, wedgeTop + 0.15], [-24.2, wedgeTop + 0.15]], -5.35, -4.6, '#8c877a');
-  kit.bb('concrete', -24.3, 0, -5.35, -22.7, 0.9, -4.6, '#86817a'); // jamb (back)
-  kit.bb('concrete', -24.3, 0, -0.75, -22.7, 0.9, -0.05, '#86817a'); // jamb stub (front, cut)
-  kit.bb('concrete', -24.3, 0.9, -5.35, -23.4, wedgeTop, -4.3, '#8a8578');
-  kit.bb('concrete', -24.3, 0.9, -0.75, -23.4, wedgeTop, -0.05, '#8a8578');
-  kit.bb('concrete', -24.3, wedgeTop - 0.55, -5.35, -22.7, wedgeTop + 0.15, -0.05, '#7f7a6e'); // lintel
-  kit.bb('concrete', -22.7, 0.02, -5.6, -16.8, 0.24, -0.1, '#a19c8e'); // apron
-  kit.box('steel', -23.1, 1.55, -2.52, 0.22, 3.1, 3.5, '#2c302f');
-  kit.box('steel', -22.96, 1.55, -2.52, 0.08, 2.7, 3.1, '#3c413f');
-  for (let k = 0; k < 5; k++) kit.box('steel', -22.9, 0.5 + k * 0.52, -2.52, 0.05, 0.06, 3.0, '#232625');
-  kit.cylR('steel', -22.82, 1.5, -1.3, 0.14, 0.25, '#6c706c', 0, 0, Math.PI / 2, 10);
-  // the sensor post by the door
-  kit.cyl('concrete', -21.5, 0, -6, 0.42, 0.4, '#8f8a7e', 12);
-  kit.cyl('steel', -21.5, 0.4, -6, 0.22, 1.25, '#3a3f3d', 10, 0.6);
-  kit.sphere('steel', -21.5, 1.72, -6, 0.2, '#2a2e2d', 12, 8);
-  kit.box('steel', -21.5, 1.45, -5.82, 0.16, 0.12, 0.06, '#1f2322');
-  // path to the hill: a straight trodden line from the door to the tree
+  // Silo 18's exit: the ramp comes up (climbing east) under a hatch just
+  // behind the cut. The camera shelter stands on the ramp's line past the
+  // hatch's far end, looking back up it and out toward the hill.
+  buildEntrance(kit, -27.65, -2.5, Math.PI / 2);
+  // path to the hill: a straight trodden line from the hatch to the tree
   const path = kit.batch('path');
-  const p0 = new THREE.Vector2(-17, -3.4), p1 = new THREE.Vector2(104, -10.5);
+  const p0 = new THREE.Vector2(-22.6, -3.0), p1 = new THREE.Vector2(104, -10.5);
   const steps = 120;
   let prev = null;
   const pc = col('#ffffff').clone();
@@ -449,13 +484,13 @@ export function buildSurface({ pool }) {
       if (tr() < 0.6) branch(end, [end[0] + (tr() - 0.5) * 0.8, end[1] + 0.35, end[2] + (tr() - 0.5) * 0.8], 0.03);
     }
   });
-  // hoods of every other silo
+  // every other silo's hatch and shelter, the shelter turned to face 18
   for (const s of SILOS) {
     if (s.id === 18) continue;
     const hx = s.x + Math.cos(s.face) * 58, hz = s.z + Math.sin(s.face) * 58;
-    const hy = terrainY(hx, hz) - 0.2;
+    const hy = terrainY(hx, hz) - 0.15;
     kit.push(0, hy, 0);
-    buildHood(kit, hx, hz, s.face, s.id === 17);
+    buildEntrance(kit, hx, hz, Math.PI / 2 - s.face);
     kit.pop();
     s.hood = [hx, hy, hz];
   }
@@ -480,7 +515,7 @@ export function buildSurface({ pool }) {
   const tryShrub = (x, z, s = 1) => {
     if (z > -3) return;
     if (Math.hypot(x, z) < 90 && z > -96) return;
-    if (x > -36 && x < -14 && z > -9) return; // keep the doorway clear
+    if (x > -40.5 && x < -21 && z > -8) return; // keep the hatch and shelter clear
     if (Math.abs(x - 108) < 2.2 && Math.abs(z + 10) < 2.2) return;
     const y = terrainY(x, z);
     shrubs.push([x, y, z, s * (0.75 + sr() * 0.85), sr() * 6]);
@@ -561,8 +596,6 @@ export function buildSurface({ pool }) {
   sky.computeBoundingSphere();
   group.add(sky);
 
-  // a lamp over the apron, a few metres out from the door (not inside it)
-  pool.add(-19.2, 3.6, -2.8, 0xffe4c0, 6);
   return group;
 }
 

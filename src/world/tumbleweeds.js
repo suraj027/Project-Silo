@@ -132,7 +132,9 @@ function shadowTexture() {
 
 // The sun's direction (matches the key light in env.js), for the shadow offset.
 const SUN = new THREE.Vector3(354, 670, 931).normalize();
-const CUT_Z = -12; // keep clear of the section and silo 18's hood
+const CUT_Z = -12; // keep clear of the section and silo 18's hatch
+/** Things to roll around rather than through: silo 18's camera shelter. */
+const OBSTACLES = [{ x: -36.3, z: -2.5, r: 5.4 }];
 
 const angleLerp = (a, b, k) => {
   const d = Math.atan2(Math.sin(b - a), Math.cos(b - a));
@@ -202,6 +204,10 @@ export function buildTumbleweeds() {
       const far = smooth(w.range * 0.6, w.range, Math.hypot(dx, dz));
       want = angleLerp(want, Math.atan2(dz, dx), far);
       want = angleLerp(want, -Math.PI / 2 + Math.sign(Math.cos(w.heading)) * 0.5, smooth(CUT_Z - 8, CUT_Z, w.z));
+      for (const o of OBSTACLES) {
+        const ox = w.x - o.x, oz = w.z - o.z, d = Math.hypot(ox, oz);
+        want = angleLerp(want, Math.atan2(oz, ox), 1 - smooth(o.r, o.r + 6, d));
+      }
       w.heading = angleLerp(w.heading, want, Math.min(1, dt * 0.7));
       const hx = Math.cos(w.heading), hz = Math.sin(w.heading);
 
@@ -214,6 +220,17 @@ export function buildTumbleweeds() {
       const ds = w.speed * dt;
       w.x += hx * ds;
       w.z = Math.min(CUT_Z, w.z + hz * ds);
+      // never inside an obstacle: slide round its edge instead
+      for (const o of OBSTACLES) {
+        const ox = w.x - o.x, oz = w.z - o.z, d = Math.hypot(ox, oz);
+        if (d < o.r) {
+          w.x = o.x + (ox / (d || 1)) * o.r;
+          w.z = Math.min(CUT_Z, o.z + (oz / (d || 1)) * o.r);
+          // pinned against the cut: go round sideways
+          const dz = w.z - o.z;
+          if (Math.hypot(w.x - o.x, dz) < o.r) w.x = o.x + (Math.sign(ox) || 1) * Math.sqrt(o.r * o.r - dz * dz);
+        }
+      }
 
       // roll about the axis across the direction of travel, bouncing every
       // couple of metres

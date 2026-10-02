@@ -1093,7 +1093,8 @@ function skeletonGeometry() {
 function remains() {
   const r = makeRng(1740);
   const s17 = SILOS.find((s) => s.id === 17) || { x: C.SILO17_POS[0], z: C.SILO17_POS[1] };
-  // the hood sits 58 m from the silo's axis, its door facing silo 18 (as in surface.js)
+  // the hatch sits 58 m from the silo's axis, its camera shelter behind it
+  // and the open side facing silo 18 (as in surface.js)
   const face = Math.atan2(-s17.z, -s17.x);
   const ux = Math.cos(face), uz = Math.sin(face);
   const vx = -uz, vz = ux;
@@ -1102,9 +1103,9 @@ function remains() {
   const ok = (x, z) => {
     if (x < -290 || x > -27 || z < -300 || z > -6) return false;
     const lx = (x - hx) * ux + (z - hz) * uz, lz = (x - hx) * vx + (z - hz) * vz;
-    if (lx > -11.5 && lx < 1.2 && Math.abs(lz) < 4.2) return false; // the hood itself
+    if (lx > -12 && lx < 4.8 && Math.abs(lz) < 2.9) return false; // the hatch, the shelter and its steps
     if (Math.hypot(x + 216.6, z + 216.6) < 3) return false; // the flag pole
-    if (x > -37 && z > -8) return false; // silo 18's hood
+    if (x > -40.5 && x < -21 && z > -8) return false; // silo 18's hatch and shelter
     return spots.every(([sx, sz]) => Math.hypot(sx - x, sz - z) > 1.6);
   };
   let guard = 0;

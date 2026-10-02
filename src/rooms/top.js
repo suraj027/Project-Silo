@@ -500,58 +500,61 @@ function sheriff({ pool, signs }) {
   pool.add(-50.4, y0 + 2.8, -2.4, 0xeef4ff, 10);
   pool.add(-46.8, y0 + 2.8, -2.2, 0xe8f4ff, 12);
 
-  // ---- the ramp up to the surface, in a tunnel open to the cut
-  const ax = -44.6, bx = -22.4, rise = -y0;
+  // ---- the way out: one long ramp, in a tunnel open to the cut, climbing
+  // straight from the airlock to the hatch in the ground. Where it nears the
+  // surface the silo's roof is its ceiling, and its last stretch rises under
+  // the hatch itself. As in the show, tall strip lights line the wall, small
+  // red lamps run along the ceiling and the floor is ribbed.
+  const ax = -44.6, bx = -23.8, rise = -y0; // foot at level 1, top at ground level
   const run = bx - ax, pitch = Math.atan2(rise, run), len = Math.hypot(run, rise);
   const tanP = rise / run, cP = Math.cos(pitch), sP = Math.sin(pitch);
   const floorAt = (x) => y0 + (x - ax) * tanP;
-  const HEAD = 3.6, ROOF = 0.42;
-  const roofTop = (x) => floorAt(x) + HEAD + ROOF / cP;
+  const HEAD = 3.6, ROOF = 0.42, UNDER = yc; // tunnel headroom; underside of the silo roof
+  const xRoof = ax + (UNDER - HEAD - y0) / tanP; // where the tunnel's own roof meets the silo's
   const zc = bz / 2, wz = -bz;
-  const mx = (ax + bx) / 2, my = y0 + rise / 2;
   const slab = '#b3aa98';
-  // floor slab (top surface on the line) and its cut face
-  k.box('matte', mx + sP * 0.25, my - cP * 0.25, zc, len, 0.5, wz, slab, 0, 0, pitch);
-  k.box('matte', mx + sP * 0.25, my - cP * 0.25, -0.01, len, 0.52, 0.04, SECTION, 0, 0, pitch);
-  // roof slab, a little longer at the top end
-  const hp = HEAD * cP + ROOF / 2, ext = 1.3;
-  const rx = mx - sP * hp + cP * (ext / 2), ry = my + cP * hp + sP * (ext / 2);
-  k.box('matte', rx, ry, zc, len + ext, ROOF, wz, slab, 0, 0, pitch);
-  k.box('matte', rx, ry, -0.01, len + ext, ROOF + 0.02, 0.04, SECTION, 0, 0, pitch);
-  // end wall at the top with the outer door
-  k.bb('matte', bx, 0, bz - 0.3, bx + 0.35, roofTop(bx), 0, back);
-  cap(k, bx, bx + 0.35, 0, roofTop(bx));
-  k.bb('metal', bx - 0.05, 0.05, -3.5, bx, 2.45, -1.2, '#3a3f41');
-  // the back wall of the whole wing: under the ramp, the tunnel, above it
-  k.bb('matte', -52.0, y0, bz - 0.3, bx, yc, bz, back);
+  // the ramp's floor slab (top surface on the line) and its cut face
   {
-    const x0 = ax + (yc - 0.02 - y0 - HEAD - ROOF / cP) / tanP;
-    const sh = new THREE.Shape();
-    sh.moveTo(x0, yc - 0.02);
-    sh.lineTo(bx, yc - 0.02);
-    sh.lineTo(bx, roofTop(bx));
-    sh.lineTo(x0, yc - 0.02);
-    k.geo('matte', extrude(sh, 0.3, false, 1), 0, 0, bz - 0.3, back);
+    const mx = (ax + bx) / 2, my = y0 + rise / 2;
+    k.box('matte', mx + sP * 0.25, my - cP * 0.25, zc, len, 0.5, wz, slab, 0, 0, pitch);
+    k.box('matte', mx + sP * 0.25, my - cP * 0.25, -0.01, len, 0.52, 0.04, SECTION, 0, 0, pitch);
   }
+  // the tunnel's roof slab, until it runs into the silo's roof
+  {
+    const rl = (xRoof - ax) / cP + 0.6;
+    const hp = HEAD * cP + ROOF / 2;
+    const cx = ax + (rl / 2) * cP - sP * hp, cy = y0 + (rl / 2) * sP + cP * hp;
+    k.box('matte', cx, cy, zc, rl, ROOF, wz, slab, 0, 0, pitch);
+    k.box('matte', cx, cy, -0.01, rl, ROOF + 0.02, 0.04, SECTION, 0, 0, pitch);
+  }
+  // the back wall of the whole wing
+  k.bb('matte', -52.0, y0, bz - 0.3, bx, yc, bz, back);
   pad(k, ax, bx, bz, 0, y0, '#9c968a');
-  for (const x of [-34.2, -26.9]) {
-    k.box('metal', x, y0 + 2.4, bz + 0.02, 0.26, 0.26, 0.04, '#6a6b68');
-    k.sphere('glow', x, y0 + 2.4, bz + 0.07, 0.08, col('#fff3de', 4), 8, 6);
+  // ribbed floor, all the way up
+  for (let x = ax + 0.5; x < bx - 0.3; x += 0.45) k.box('matte', x, floorAt(x) + 0.012, zc, 0.09, 0.025, wz - 0.1, '#6f695e', 0, 0, pitch);
+  // tall strip lights on the wall, each in a dark frame, while there is room
+  for (let x = ax + 1.6; floorAt(x) + 3.1 < UNDER; x += 2.4) {
+    const f = floorAt(x);
+    k.box('metal', x, f + 1.75, bz + 0.03, 0.34, 2.5, 0.06, '#26292b');
+    k.box('glow', x, f + 1.75, bz + 0.07, 0.13, 2.25, 0.03, col('#dff6ff', 5));
   }
-  // wall lamps and a handrail along the tunnel
-  for (const x of [-43.0, -39.3, -35.6, -31.9, -28.2, -24.5]) globe(k, x, floorAt(x) + 2.7, bz, 0, { power: 4.5, color: '#ffe8c8' });
-  // a pale handrail on short brackets, and a conduit under the roof
-  const railA = [ax + 0.6, floorAt(ax + 0.6) + 0.95, bz + 0.16], railB = [bx - 0.8, floorAt(bx - 0.8) + 0.95, bz + 0.16];
-  k.rod('metal', railA, railB, 0.03, '#b3aea3', 6);
-  for (let x = ax + 1.4; x < bx - 0.8; x += 2.6) k.box('metal', x, floorAt(x) + 0.9, bz + 0.08, 0.04, 0.1, 0.16, '#8f8b82');
-  k.rod('metal', [ax + 0.4, floorAt(ax + 0.4) + HEAD - 0.22, -0.55], [bx - 0.4, floorAt(bx - 0.4) + HEAD - 0.22, -0.55], 0.12, '#6e6254', 8);
+  // small red lamps along the ceiling
+  for (let x = ax + 2.2; x < bx - 8; x += 3.1) {
+    const cy = Math.min(floorAt(x) + HEAD, UNDER) - 0.04;
+    k.sphere('glow', x, cy, zc, 0.07, col('#ff3b2e', 7), 8, 6, 0.6);
+  }
+  // a pale handrail on short brackets, and a conduit under the tunnel roof
+  const railEnd = bx - 2.7;
+  k.rod('metal', [ax + 0.6, floorAt(ax + 0.6) + 0.95, bz + 0.16], [railEnd, floorAt(railEnd) + 0.95, bz + 0.16], 0.03, '#b3aea3', 6);
+  for (let x = ax + 1.4; x < railEnd; x += 2.6) k.box('metal', x, floorAt(x) + 0.9, bz + 0.08, 0.04, 0.1, 0.16, '#8f8b82');
+  k.rod('metal', [ax + 0.4, floorAt(ax + 0.4) + HEAD - 0.22, -0.55], [xRoof - 0.3, floorAt(xRoof - 0.3) + HEAD - 0.22, -0.55], 0.12, '#6e6254', 8);
   // keypads by the lower end
   for (const [x, dy] of [[-41.9, 0], [-40.8, 0.2]]) {
     k.box('metal', x, y0 + 3.0 + dy, bz + 0.04, 0.46, 0.62, 0.08, '#55585a');
     k.box('glow', x, y0 + 3.08 + dy, bz + 0.09, 0.07, 0.3, 0.01, col('#f2f2ea', 2.2));
   }
-  pool.add(-38, floorAt(-38) + 2.6, -2.4, 0xffe4c0, 14);
-  pool.add(-28, floorAt(-28) + 2.6, -2.4, 0xffe4c0, 14);
+  pool.add(-39, floorAt(-39) + 2.6, -2.4, 0xdff3ff, 14);
+  pool.add(-32, floorAt(-32) + 1.9, -2.4, 0xdff3ff, 12);
   void r;
   return k.finish(roomMats());
 }

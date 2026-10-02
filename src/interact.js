@@ -14,6 +14,7 @@ import { inMode } from './ui/config.js';
 const CLICK_PX = 5; // max pointer travel for a click
 const CLICK_MS = 400; // max press duration for a click
 const DEG = Math.PI / 180;
+const GROUND_Y = 0.12; // the crater floor over silo 18
 
 const MODE_TOAST = {
   18: 'Silo 18 — lights on, pumps running',
@@ -45,8 +46,7 @@ function buildPickVolumes(places) {
   const box = (i, [x, y, z], [sx, sy, sz]) => add(i, boxGeo, x, y, z, sx, sy, sz, 0.5 * Math.hypot(sx, sy, sz));
 
   places.forEach((p, i) => {
-    if (p.id === 'surface') sphere(i, [-24, 2, -2.5], 10);
-    else if (p.kind === 'room') {
+    if (p.kind === 'room') {
       if (p.pickBox) box(i, p.pickBox.center, p.pickBox.size);
       else {
         const s = p.side === 'west' ? -1 : 1;
@@ -185,11 +185,20 @@ export function createInteraction(app, ui) {
     raycaster.setFromCamera(ndc, camera);
     hits.length = 0;
     raycaster.intersectObjects(pickGroup.children, false, hits);
+    // The ground hides what is under it: past the point where the ray meets
+    // the ground behind the cut, nothing below can be picked (so the hatch
+    // and shelter pick the surface, not the room under them).
+    const ro = raycaster.ray.origin, rd = raycaster.ray.direction;
+    let groundT = Infinity;
+    if (ro.y > GROUND_Y && rd.y < 0) {
+      const t = (GROUND_Y - ro.y) / rd.y;
+      if (ro.z + rd.z * t < 0) groundT = t;
+    }
     let best = -1;
     let bestScore = Infinity;
     for (let k = 0; k < hits.length; k++) {
       const u = hits[k].object.userData;
-      if (!here(places[u.index])) continue;
+      if (!here(places[u.index]) || hits[k].distance > groundT) continue;
       const score = raycaster.ray.distanceToPoint(u.center) / u.radius;
       if (score < bestScore) {
         bestScore = score;

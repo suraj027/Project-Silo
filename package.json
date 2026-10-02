@@ -1,0 +1,18 @@
+{
+  "name": "project-silo",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "An interactive 3D cutaway of an underground silo — 144 levels, built with Three.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "vite": "^8.3.1"
+  }
+}

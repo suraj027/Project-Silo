@@ -34,6 +34,5 @@ produces a static site in `dist/`.
 | `src/data/places.js` | the 22 places, camera framings and card copy |
 
 Everything — geometry, textures and signage — is generated procedurally at
-start-up; there are no model or image assets apart from `public/preview.jpg`
-used behind the loading screen.
+start-up; there are no model or image assets.
 # Project-Silo

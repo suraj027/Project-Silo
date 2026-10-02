@@ -1,3 +1,4 @@
+import '@fontsource/vt323/latin-400.css';
 import './style.css';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -22,16 +23,33 @@ import { createInteraction } from './interact.js';
 
 const nextFrame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 
+// The loading screen is a terminal booting up: each finished step moves up
+// into the log with an OK, the current one sits on the prompt line.
 const loader = {
   el: document.getElementById('loader'),
   fill: document.getElementById('loader-fill'),
   text: document.getElementById('loader-text'),
+  log: document.getElementById('loader-log'),
+  pct: document.getElementById('loader-pct'),
+  msg: null,
   set(p, msg) {
     this.fill.style.width = `${Math.round(p * 100)}%`;
-    if (msg) this.text.textContent = msg;
+    this.pct.textContent = `${Math.round(p * 100)}%`;
+    if (!msg || msg === this.msg) return;
+    if (this.msg) {
+      const li = document.createElement('li');
+      const label = document.createElement('span');
+      label.textContent = this.msg.replace(/…$/, '');
+      li.append(label, document.createElement('i'), Object.assign(document.createElement('b'), { textContent: 'OK' }));
+      this.log.append(li);
+      while (this.log.children.length > 7) this.log.firstChild.remove();
+    }
+    this.msg = msg;
+    this.text.textContent = msg;
   },
   done() {
     this.set(1, 'Opening the doors…');
+    // the tube switches off and the silo is behind it
     this.el.classList.add('done');
     setTimeout(() => this.el.remove(), 900);
   },
@@ -199,6 +217,16 @@ async function boot() {
   app.ui = ui;
   app.tour = ix;
 
+  // The first frames upload every texture and fill the shadow map, which
+  // takes the best part of a second. Draw them while the loading screen is
+  // still up, so its switch-off animation runs on a page that is idle.
+  loader.set(1, 'Opening the doors…');
+  for (let i = 0; i < 2; i++) {
+    env.update(controls.target, camera.position.distanceTo(controls.target), 0, false);
+    env.composer.render(0);
+    await nextFrame();
+  }
+
   const timer = new THREE.Timer();
   timer.connect(document);
   let lastDist = 0;
@@ -231,4 +259,5 @@ boot().catch((err) => {
   console.error(err);
   const t = document.getElementById('loader-text');
   if (t) t.textContent = 'Something went wrong while building the silo — see the console.';
+  document.getElementById('loader')?.classList.add('error');
 });

@@ -8,7 +8,6 @@
   <meta name="description" content="An interactive 3D cutaway of an underground silo: 144 levels, a great spiral stair, and the rooms that keep ten thousand people alive." />
   <title>The Silo · interactive 3D cutaway</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='47' fill='%231f2220'/><circle cx='50' cy='50' r='33' fill='none' stroke='%23e9e2cf' stroke-width='5'/><path d='M50 26 A24 24 0 1 1 26 50' fill='none' stroke='%23e0902e' stroke-width='6' stroke-linecap='round'/><circle cx='50' cy='50' r='7' fill='%23e9e2cf'/></svg>" />
-  <link rel="preload" href="/preview.jpg" as="image" />
 </head>
 <body>
   <canvas id="c"></canvas>
@@ -18,9 +17,14 @@
     <div class="loader-inner">
       <div class="loader-logo">SILO</div>
       <div class="loader-sub">144 levels · cut open · interactive 3D</div>
-      <div class="loader-bar"><div class="loader-fill" id="loader-fill"></div></div>
+      <ol class="loader-log" id="loader-log" aria-hidden="true"></ol>
       <div class="loader-text" id="loader-text">Pouring concrete…</div>
+      <div class="loader-meter">
+        <div class="loader-bar"><div class="loader-fill" id="loader-fill"></div></div>
+        <span class="loader-pct" id="loader-pct">0%</span>
+      </div>
     </div>
+    <div class="crt-fx" aria-hidden="true"><div class="crt-roll"></div></div>
   </div>
   <script type="module" src="/src/main.js"></script>
 </body>

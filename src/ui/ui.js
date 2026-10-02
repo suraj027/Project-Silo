@@ -41,6 +41,12 @@ function el(tag, cls, text) {
   return e;
 }
 
+/** A place's level as the terminal prints it: 001, 073, 145 (the surface keeps its arrow). */
+const lvlText = (p) => {
+  const b = p.badge ?? p.level;
+  return typeof b === 'number' ? String(b).padStart(3, '0') : String(b);
+};
+
 function button(cls, text, attrs = {}) {
   const b = el('button', cls, text);
   b.type = 'button';
@@ -114,7 +120,7 @@ export function createUI(app) {
     legend.append(el('div', 'legend-zone', ZONE_TITLES[zone] || zone));
     for (const p of list) {
       const b = button('legend-item', null, { 'data-id': p.id });
-      b.append(el('span', 'lvl', String(p.badge ?? p.level)), el('span', 'name', p.name));
+      b.append(el('span', 'lvl', lvlText(p)), el('span', 'name', p.name));
       b.addEventListener('pointerenter', () => emit('legend-hover', p.id));
       b.addEventListener('pointerleave', () => emit('legend-hover', null));
       b.addEventListener('focus', () => emit('legend-hover', p.id));
@@ -129,7 +135,27 @@ export function createUI(app) {
     const b = e.target.closest('.legend-item');
     if (b) emit('legend', b.dataset.id);
   });
-  topLeft.append(brand, row, legend);
+  // The places list is drawn as a green-phosphor terminal: a header with a
+  // live clock, the list itself, a prompt that echoes whatever is under the
+  // pointer, and the CRT glass (scanlines, grille, rolling refresh) on top.
+  const term = el('div', 'crt');
+  const termHead = el('div', 'crt-head');
+  const termTitle = el('span', 'crt-title');
+  const termClock = el('span', 'crt-clock');
+  termClock.setAttribute('aria-hidden', 'true');
+  termHead.append(termTitle, termClock);
+  const termCols = el('div', 'crt-cols');
+  termCols.setAttribute('aria-hidden', 'true');
+  termCols.append(el('span', null, 'LVL'), el('span', null, 'LOCATION'));
+  const termFoot = el('div', 'crt-foot');
+  termFoot.setAttribute('aria-hidden', 'true');
+  const termPrompt = el('span', 'crt-prompt');
+  termFoot.append(termPrompt, el('span', 'crt-cursor'));
+  const termFx = el('div', 'crt-fx');
+  termFx.setAttribute('aria-hidden', 'true');
+  termFx.append(el('div', 'crt-roll'));
+  term.append(termHead, termCols, legend, termFoot, termFx);
+  topLeft.append(brand, row, term);
 
   // --- top right: stats + hint ----------------------------------------------
   const topRight = el('div', 'ui-top-right');
@@ -177,7 +203,7 @@ export function createUI(app) {
   cardEl.setAttribute('aria-labelledby', 'card-title');
   cardEl.setAttribute('aria-hidden', 'true');
   cardEl.inert = true;
-  const cardClose = button('card-close', '×', { 'aria-label': 'Close' });
+  const cardClose = button('card-close', 'X', { 'aria-label': 'Close' });
   const cardLevel = el('div', 'card-level');
   const cardTitle = el('h2', 'card-title');
   cardTitle.id = 'card-title';
@@ -186,12 +212,21 @@ export function createUI(app) {
   const cardFacts = el('ul', 'card-facts');
   const cardEps = el('div', 'card-eps');
   const cardNav = el('div', 'card-nav');
-  const cardPrev = button(null, '‹ prev', { id: 'card-prev' });
+  const cardPrev = button(null, '< prev', { id: 'card-prev' });
   const cardIndex = el('span');
   cardIndex.id = 'card-index';
-  const cardNext = button(null, 'next ›', { id: 'card-next' });
+  const cardNext = button(null, 'next >', { id: 'card-next' });
   cardNav.append(cardPrev, cardIndex, cardNext);
-  cardEl.append(cardClose, cardLevel, cardTitle, cardSub, cardBody, cardFacts, cardEps, cardNav);
+  // Drawn as a terminal window like the places list: a title bar, the text
+  // (which scrolls on its own, under fixed CRT glass), and a row of keys.
+  const cardBar = el('div', 'card-bar');
+  cardBar.append(cardLevel, cardClose);
+  const cardScroll = el('div', 'card-scroll');
+  cardScroll.append(cardTitle, cardSub, cardBody, cardFacts, cardEps);
+  const cardFx = el('div', 'crt-fx');
+  cardFx.setAttribute('aria-hidden', 'true');
+  cardFx.append(el('div', 'crt-roll'));
+  cardEl.append(cardBar, cardScroll, cardNav, cardFx);
   cardClose.addEventListener('click', () => emit('close'));
   cardPrev.addEventListener('click', () => emit('prev'));
   cardNext.addEventListener('click', () => emit('next'));
@@ -256,7 +291,8 @@ export function createUI(app) {
     const r = legend.getBoundingClientRect();
     legendOk = r.width > 0 && r.height > 0;
     if (!legendOk) return;
-    legendX = r.right + 2;
+    // lines leave from the terminal's outer edge
+    legendX = term.getBoundingClientRect().right + 2;
     for (let i = 0; i < n; i++) {
       const it = itemEls[i];
       if (!it || it.hidden) {
@@ -302,7 +338,9 @@ export function createUI(app) {
     }
   }
 
-  function updateLeaders(overview, dt) {
+  // Only the place under the pointer (or the open one) gets a line; the
+  // overview stays clear.
+  function updateLeaders(dt) {
     layoutAge += dt;
     if (layoutDirty || layoutAge > 1) measureLegend();
     for (let i = 0; i < n; i++) {
@@ -314,7 +352,6 @@ export function createUI(app) {
         const code = project(L.ax, L.ay, L.az);
         if (id === hoverId) show = hot = code > 0;
         else if (cardOpen) show = hot = id === activeId && code > 0;
-        else show = overview && code === 2;
         if (show) {
           const sx = Math.round(legendX);
           const sy = Math.round(itemY[i]);
@@ -457,8 +494,12 @@ export function createUI(app) {
     cardFacts.hidden = !(c.facts && c.facts.length);
     cardEps.textContent = c.foot ?? '';
     cardEps.hidden = !c.foot;
-    cardIndex.textContent = `${index + 1} / ${total}`;
-    cardEl.scrollTop = 0;
+    cardIndex.textContent = `${String(index + 1).padStart(2, '0')} / ${String(total).padStart(2, '0')}`;
+    cardScroll.scrollTop = 0;
+    // each page prints out afresh
+    cardEl.classList.remove('printing');
+    void cardEl.offsetWidth;
+    cardEl.classList.add('printing');
     cardEl.inert = false;
     cardEl.setAttribute('aria-hidden', 'false');
     cardEl.classList.add('show');
@@ -576,6 +617,7 @@ export function createUI(app) {
       modeBtns[k].setAttribute('aria-pressed', String(k === mode));
     }
     html.classList.toggle('silo17', mode === '17');
+    termTitle.textContent = mode === '17' ? 'SILO-17 // AUX PWR' : 'SILO-18 // INDEX';
     for (const mk of markers) mk.b.textContent = (mode === '17' && mk.def.s17) || mk.def.title;
     places.forEach((p, i) => {
       if (p.only && itemEls[i]) itemEls[i].hidden = !inMode(p, mode);
@@ -587,14 +629,39 @@ export function createUI(app) {
   }
   setMode(mode);
 
+  // --- terminal: clock and prompt ----------------------------------------------------------
+  const placeById = new Map(places.map((p) => [p.id, p]));
+  let clockSec = -1;
+  let promptTarget = '';
+  let promptT = 0;
+  function updateTerminal(dt) {
+    const now = new Date();
+    if (now.getSeconds() !== clockSec) {
+      clockSec = now.getSeconds();
+      termClock.textContent = now.toTimeString().slice(0, 8);
+    }
+    // The prompt types out what the pointer is on (or what is open).
+    const p = placeById.get(hoverId) || placeById.get(activeId);
+    const target = p ? `> ${p.id === activeId ? 'VIEW' : 'GOTO'} ${lvlText(p)} ${p.name}` : '> READY';
+    if (target !== promptTarget) {
+      promptTarget = target;
+      promptT = 2;
+    }
+    if (promptT < promptTarget.length) {
+      promptT = Math.min(promptTarget.length, promptT + dt * 55);
+      termPrompt.textContent = promptTarget.slice(0, Math.floor(promptT));
+    }
+  }
+
   // --- per frame (after render) ----------------------------------------------------------
   function update(dt) {
     const dist = app.camera.position.distanceTo(app.controls.target);
     const overview = dist > OVERVIEW_DIST && !cardOpen;
     updateMarkers(overview);
-    updateLeaders(overview, dt);
+    updateLeaders(dt);
     updateStats();
     updateDyk(dt);
+    updateTerminal(dt);
   }
 
   showIntro(6500);
